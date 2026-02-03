@@ -104,20 +104,20 @@ class SecurityLogAnalyzer:
     def print_alerts(self, failed_login_alerts, unusual_hour_alerts):
         """Print real-time security alerts"""
         print("\n" + "="*70)
-        print("🚨 SECURITY ALERTS 🚨".center(70))
+        print(" SECURITY ALERTS ".center(70))
         print("="*70 + "\n")
         
         if failed_login_alerts:
-            print("⚠️  EXCESSIVE FAILED LOGIN ATTEMPTS DETECTED:")
+            print("  EXCESSIVE FAILED LOGIN ATTEMPTS DETECTED:")
             print("-" * 70)
             for alert in failed_login_alerts:
                 print(f"   IP Address: {alert['ip']}")
                 print(f"   Failed Attempts: {alert['count']}")
                 print(f"   Target Usernames: {', '.join(alert['usernames'])}")
-                print(f"   ⚡ ACTION REQUIRED: Consider blocking this IP\n")
+                print(f"    ACTION REQUIRED: Consider blocking this IP\n")
         
         if unusual_hour_alerts:
-            print("⚠️  UNUSUAL HOUR LOGIN ACTIVITY (2AM-4AM):")
+            print("  UNUSUAL HOUR LOGIN ACTIVITY (2AM-4AM):")
             print("-" * 70)
             for alert in unusual_hour_alerts:
                 status_icon = "✅" if alert['status'] == 'success' else "❌"
