@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""
+SOC Security Log Analyzer
+A simple tool for detecting suspicious login behavior
+"""
+
+import csv
+from datetime import datetime
+from collections import defaultdict
+import sys
+
+class SecurityLogAnalyzer:
+    def __init__(self, log_file):
+        self.log_file = log_file
+        self.failed_login_threshold = 5
+        self.suspicious_hours = (2, 4)  # 2AM to 4AM
+        
+        # Data structures for analysis
+        self.failed_attempts = defaultdict(list)  # ip -> [timestamps]
+        self.unusual_hour_logins = []
+        self.all_events = []
+        
+    def parse_logs(self):
+        """Read and parse the log file"""
+        print(f"[*] Reading log file: {self.log_file}")
+        try:
+            with open(self.log_file, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    self.all_events.append(row)
+            print(f"[+] Successfully loaded {len(self.all_events)} log entries\n")
+            return True
+        except FileNotFoundError:
+            print(f"[!] ERROR: Log file '{self.log_file}' not found!")
+            return False
+        except Exception as e:
+            print(f"[!] ERROR: {str(e)}")
+            return False
+    
+    def analyze_failed_logins(self):
+        """Detect excessive failed login attempts"""
+        print("[*] Analyzing failed login attempts...")
+        
+        for event in self.all_events:
+            if event['status'] == 'failed' and event['action'] == 'login':
+                ip = event['ip_address']
+                self.failed_attempts[ip].append({
+                    'timestamp': event['timestamp'],
+                    'username': event['username']
+                })
+        
+        # Check for threshold violations
+        alerts = []
+        for ip, attempts in self.failed_attempts.items():
+            if len(attempts) > self.failed_login_threshold:
+                alerts.append({
+                    'type': 'EXCESSIVE_FAILED_LOGINS',
+                    'ip': ip,
+                    'count': len(attempts),
+                    'usernames': list(set([a['username'] for a in attempts]))
+                })
+        
+        return alerts
+    
+    def analyze_unusual_hours(self):
+        """Detect logins during suspicious hours (2AM-4AM)"""
+        print("[*] Analyzing login times for unusual hour activity...")
+        
+        alerts = []
+        for event in self.all_events:
+            if event['action'] == 'login':
+                timestamp = datetime.strptime(event['timestamp'], '%Y-%m-%d %H:%M:%S')
+                hour = timestamp.hour
+                
+                if self.suspicious_hours[0] <= hour < self.suspicious_hours[1]:
+                    self.unusual_hour_logins.append(event)
+                    alerts.append({
+                        'type': 'UNUSUAL_HOUR_LOGIN',
+                        'timestamp': event['timestamp'],
+                        'username': event['username'],
+                        'ip': event['ip_address'],
+                        'status': event['status']
+                    })
+        
+        return alerts
+    
+    def detect_suspicious_ips(self):
+        """Identify IPs with multiple failed attempts or unusual patterns"""
+        print("[*] Identifying suspicious IP addresses...")
+        
+        suspicious_ips = set()
+        
+        # IPs with excessive failed logins
+        for ip, attempts in self.failed_attempts.items():
+            if len(attempts) > self.failed_login_threshold:
+                suspicious_ips.add(ip)
+        
+        # IPs logging in during unusual hours
+        for event in self.unusual_hour_logins:
+            suspicious_ips.add(event['ip_address'])
+        
+        return list(suspicious_ips)
+    
+    def print_alerts(self, failed_login_alerts, unusual_hour_alerts):
+        """Print real-time security alerts"""
+        print("\n" + "="*70)
+        print("🚨 SECURITY ALERTS 🚨".center(70))
+        print("="*70 + "\n")
+        
+        if failed_login_alerts:
+            print("⚠️  EXCESSIVE FAILED LOGIN ATTEMPTS DETECTED:")
+            print("-" * 70)
+            for alert in failed_login_alerts:
+                print(f"   IP Address: {alert['ip']}")
+                print(f"   Failed Attempts: {alert['count']}")
+                print(f"   Target Usernames: {', '.join(alert['usernames'])}")
+                print(f"   ⚡ ACTION REQUIRED: Consider blocking this IP\n")
+        
+        if unusual_hour_alerts:
+            print("⚠️  UNUSUAL HOUR LOGIN ACTIVITY (2AM-4AM):")
+            print("-" * 70)
+            for alert in unusual_hour_alerts:
+                status_icon = "✅" if alert['status'] == 'success' else "❌"
+                print(f"   {status_icon} {alert['timestamp']} | User: {alert['username']} | IP: {alert['ip']}")
+            print()
+        
+        if not failed_login_alerts and not unusual_hour_alerts:
+            print("✅ No critical alerts detected")
+        
+        print("="*70 + "\n")
+    
+    def generate_report(self, suspicious_ips, failed_login_alerts, unusual_hour_alerts):
+        """Generate a summary security report"""
+        print("\n" + "="*70)
+        print("📊 SECURITY ANALYSIS REPORT".center(70))
+        print("="*70 + "\n")
+        
+        print(f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Log File Analyzed: {self.log_file}")
+        print(f"Total Events Analyzed: {len(self.all_events)}\n")
+        
+        print("🔍 FINDINGS SUMMARY:")
+        print("-" * 70)
+        print(f"  • Suspicious IP Addresses Identified: {len(suspicious_ips)}")
+        print(f"  • Excessive Failed Login Incidents: {len(failed_login_alerts)}")
+        print(f"  • Unusual Hour Login Attempts: {len(unusual_hour_alerts)}")
+        print()
+        
+        if suspicious_ips:
+            print("🚩 TOP SUSPICIOUS IP ADDRESSES:")
+            print("-" * 70)
+            for ip in suspicious_ips:
+                failed_count = len(self.failed_attempts.get(ip, []))
+                print(f"  • {ip} - {failed_count} failed attempts")
+            print()
+        
+        print("📋 RECOMMENDED ACTIONS:")
+        print("-" * 70)
+        if failed_login_alerts or unusual_hour_alerts:
+            print("  1. Investigate the flagged IP addresses immediately")
+            print("  2. Consider implementing IP-based rate limiting")
+            print("  3. Enable multi-factor authentication (MFA)")
+            print("  4. Review and strengthen password policies")
+            print("  5. Set up automated alerting for unusual hour activity")
+        else:
+            print("  • Continue monitoring logs regularly")
+            print("  • Maintain current security posture")
+        
+        print("\n" + "="*70 + "\n")
+    
+    def run_analysis(self):
+        """Main analysis workflow"""
+        print("\n🔐 SOC Security Log Analyzer v1.0")
+        print("="*70 + "\n")
+        
+        # Parse logs
+        if not self.parse_logs():
+            return
+        
+        # Run analysis
+        failed_login_alerts = self.analyze_failed_logins()
+        unusual_hour_alerts = self.analyze_unusual_hours()
+        suspicious_ips = self.detect_suspicious_ips()
+        
+        # Print alerts
+        self.print_alerts(failed_login_alerts, unusual_hour_alerts)
+        
+        # Generate report
+        self.generate_report(suspicious_ips, failed_login_alerts, unusual_hour_alerts)
+
+
+def main():
+    # Default log file
+    log_file = 'security_logs.csv'
+    
+    # Allow custom log file via command line
+    if len(sys.argv) > 1:
+        log_file = sys.argv[1]
+    
+    # Run the analyzer
+    analyzer = SecurityLogAnalyzer(log_file)
+    analyzer.run_analysis()
+
+
+if __name__ == "__main__":
+    main()
